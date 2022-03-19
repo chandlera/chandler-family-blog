@@ -8,6 +8,7 @@ module.exports = function (eleventyConfig) {
 
   eleventyConfig.addWatchTarget("./src/_tmp/style.css");
   eleventyConfig.addPassthroughCopy("./src/images");
+  eleventyConfig.addPassthroughCopy("./src/.well-known");
   eleventyConfig.addPassthroughCopy({ "./src/_tmp/style.css": "./css/style.css" });
 
   eleventyConfig.addTransform('htmlmin', (content, outputPath) => {
