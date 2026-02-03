@@ -19,22 +19,27 @@ const getDatabaseData = async () => {
         ]
     };
 
-    const dataBaseData = await Cache(`${ROOT_NOTION_API}/databases/${process.env.DATABASE_ID}/query`, {
-        duration: "1d",
-        type: "json",
-        dryRun: true,
-        fetchOptions: {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${process.env.NOTION_TOKEN}`,
-                "Notion-Version": "2021-08-16",
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(filter)
-        }
-    });
+    try {
+        const dataBaseData = await Cache(`${ROOT_NOTION_API}/databases/${process.env.DATABASE_ID}/query`, {
+            duration: "1d",
+            type: "json",
+            dryRun: true,
+            fetchOptions: {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${process.env.NOTION_TOKEN}`,
+                    "Notion-Version": "2021-08-16",
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(filter)
+            }
+        });
 
-    return dataBaseData.results;
+        return dataBaseData.results;
+    } catch (error) {
+        console.error("Error fetching Notion database:", error.message);
+        return [];
+    }
 }
 
 const getPageBlockChildrenData = async (blockId) => {
@@ -60,7 +65,7 @@ function slugify(text) {
       .replace(/\s+/g, '-')
       .replace(/&/g, '-and-')
       .replace(/[^\w\-]+/g, '')
-      .replace(/--+/g, '-')  : '';
+      .replace(/--+/g, '-') : '';
 }
 
 const mapNotionResponseToTextContent = ([key, property]) => {
@@ -85,83 +90,88 @@ const mapNotionResponseToTextContent = ([key, property]) => {
 };
 
 module.exports = async function () {
-    const databaseData = await getDatabaseData();
+    try {
+        const databaseData = await getDatabaseData();
 
-    // parse the notion response down to something more reasonable
-    const results = databaseData.map((post, index) => {
-        const flattenedProperties = Object.entries(post.properties)
-        .filter(
-            ([key, property]) =>
-            property.select || (property[property.type] && property[property.type].length)
-        )
-        .map(mapNotionResponseToTextContent)
-        .reduce((previousValue, currentValue, currentIndex, array) => {
-          return {
-            ...previousValue,
-            ...currentValue
-          }
-        }, {});
+        // parse the notion response down to something more reasonable
+        const results = databaseData.map((post, index) => {
+            const flattenedProperties = Object.entries(post.properties)
+            .filter(
+                ([key, property]) =>
+                property.select || (property[property.type] && property[property.type].length)
+            )
+            .map(mapNotionResponseToTextContent)
+            .reduce((previousValue, currentValue, currentIndex, array) => {
+              return {
+                ...previousValue,
+                ...currentValue
+              }
+            }, {});
+
+            return {
+                id: post.id,
+                created: post.created_time,
+                url: post.url,
+                slug: slugify(flattenedProperties.Title),
+                ...flattenedProperties,
+            };
+        });
+
+        const finalResult = await Promise.all(results.map(async (result) => {
+            const blockData = await getPageBlockChildrenData(result.id);
+
+            const mappedBlockData = blockData.results
+            .map(block => {
+                let mdConvert;
+                let mdText;
+
+                switch(block.type) {
+                    case 'heading_1':
+                        mdConvert = '#';
+                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
+                        break;
+                    case 'heading_2':
+                        mdConvert = '##';
+                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
+                        break;
+                    case 'heading_3':
+                        mdConvert = '###';
+                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
+                        break;
+                    case 'bulleted_list_item':
+                        mdConvert = '- ';
+                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
+                        break;
+                    case 'paragraph':
+                        mdConvert = '';
+                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
+                        break;
+                    case 'image':
+                        mdConvert = '';
+                        mdText = `![post block related](${block[block.type].file.url})`;
+                        break;
+                    default:
+                        mdConvert = '';
+                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
+                        break;
+                }
+
+                return `${mdConvert} ${mdText}`;
+            }).join('\n');
+
+            return {
+                ...result,
+                block: mappedBlockData
+            };
+        }));
 
         return {
-            id: post.id,
-            created: post.created_time,
-            url: post.url,
-            slug: slugify(flattenedProperties.Title),
-            ...flattenedProperties,
+            posts: finalResult
         };
-    });
-
-    const finalResult = await Promise.all(results.map(async (result) => {
-        const blockData = await getPageBlockChildrenData(result.id);
-
-        const mappedBlockData = blockData.results
-        .map(block => {
-            let mdConvert;
-            let mdText;
-
-            switch(block.type) {
-                case 'heading_1':
-                    mdConvert = '#';
-                    mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                    break;
-                case 'heading_2':
-                    mdConvert = '##';
-                    mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                    break;
-                case 'heading_3':
-                    mdConvert = '###';
-                    mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                    break;
-                case 'bulleted_list_item':
-                    mdConvert = '- ';
-                    mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                    break;
-                case 'paragraph':
-                    mdConvert = '';
-                    mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                    break;
-                case 'image':
-                    mdConvert = '';
-                    mdText = `![post block related](${block[block.type].file.url})`;
-                    break;
-                default:
-                    mdConvert = '';
-                    mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                    break;
-            }
-
-            return `${mdConvert} ${mdText}`;
-        }).join('\n');
-
+    } catch (error) {
+        console.error("Error in notion data module:", error);
         return {
-            ...result,
-            block: mappedBlockData
+            posts: []
         };
-    }));
-
-
-
-    return await {
-        posts: await finalResult
-    };
+    }
 };

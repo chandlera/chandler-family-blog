@@ -13,18 +13,21 @@
   },
   "author": "alchandler",
   "license": "ISC",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "dependencies": {
-    "@11ty/eleventy": "^0.11.0",
-    "axios": "^0.21.2",
-    "eleventy-plugin-error-overlay": "^0.1.2",
+    "@11ty/eleventy": "^3.1.2",
+    "axios": "^1.13.4",
     "html-minifier": "^4.0.0",
-    "slugify": "^1.4.6"
+    "slugify": "^1.6.6"
   },
   "devDependencies": {
-    "@11ty/eleventy-cache-assets": "github:11ty/eleventy-cache-assets",
-    "autoprefixer": "^10.2.1",
-    "dotenv": "^10.0.0",
-    "postcss-cli": "^8.3.1",
-    "tailwindcss": "^2.0.2"
+    "@11ty/eleventy-cache-assets": "^2.3.0",
+    "autoprefixer": "^10.4.24",
+    "dotenv": "^17.2.3",
+    "postcss": "^8.4.49",
+    "postcss-cli": "^11.0.1",
+    "tailwindcss": "^3.4.19"
   }
 }

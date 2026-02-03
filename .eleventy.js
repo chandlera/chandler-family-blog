@@ -1,10 +1,8 @@
 const slugify = require('slugify');
 const HtmlMin = require('html-minifier');
-const ErrorOverlay = require('eleventy-plugin-error-overlay');
 
 module.exports = function (eleventyConfig) {
   eleventyConfig.setTemplateFormats(['md']);
-  eleventyConfig.addPlugin(ErrorOverlay);
 
   eleventyConfig.addWatchTarget("./src/_tmp/style.css");
   eleventyConfig.addPassthroughCopy("./src/images");

@@ -10,9 +10,18 @@
     <link rel="icon" type="image/png" sizes="32x32" href="images/chandler-crest.svg">
     <link rel="icon" type="image/png" sizes="16x16" href="images/chandler-crest.svg">
 
-	<link rel="canonical" href="{{ metadata.url + page.url }}" />
+	<link rel="canonical" href="{{ metadata.url | append: page.url }}" />
 
-	{% include _metadata %}
+	<meta property="og:site_name" content="{{ renderData.title }}" />
+	<meta property="og:title" content="{{ renderData.title }}" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="{{ metadata.url | append: page.url }}" />
+
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta property="og:image" content="images/mallow.png" />
+	<meta name="twitter:image" content="images/mallow.png" />
+	<meta property="og:image:alt" content="Page image for {{ metadata.title }}" />
+	<meta name="twitter:image:alt" content="Page image for {{ metadata.title }}" />
 </head>
 <body>
 	<nav class="bg-gray-800 mx-auto px-2 py-2 sm:px-6 lg:px-8 lg:py-4">
@@ -37,6 +46,12 @@
 	<main>
 	{{ content }}
 	</main>
-	{% include _footer %}
+	<footer class="bg-gray-800 text-white border-red-500 fixed inset-x-0 bottom-0 p-4">
+	    <div class="container mx-auto px-6 flex flex-col items-center">
+	        <p class="text-sm font-bold mb-2">
+	            © {% if page.date %}{{ page.date | date: "%Y" }}{% else %}{{ "now" | date: "%Y" }}{% endif %} by Alan Chandler
+	        </p>
+	    </div>
+	</footer>
 </body>
 </html>
