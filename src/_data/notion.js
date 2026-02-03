@@ -2,6 +2,33 @@ const Cache = require("@11ty/eleventy-cache-assets");
 require("dotenv").config();
 
 const ROOT_NOTION_API = 'https://api.notion.com/v1';
+const NOTION_API_VERSION = '2025-09-03';
+
+const getDataSourceId = async () => {
+    try {
+        const databaseResponse = await Cache(`${ROOT_NOTION_API}/databases/${process.env.DATABASE_ID}`, {
+            duration: "1d",
+            type: "json",
+            fetchOptions: {
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${process.env.NOTION_TOKEN}`,
+                    "Notion-Version": NOTION_API_VERSION,
+                    "Content-Type": "application/json"
+                }
+            }
+        });
+
+        // Get the first data source from the database
+        if (databaseResponse.data_sources && databaseResponse.data_sources.length > 0) {
+            return databaseResponse.data_sources[0].id;
+        }
+        throw new Error("No data sources found in database");
+    } catch (error) {
+        console.error("Error fetching data source ID:", error.message);
+        throw error;
+    }
+}
 
 const getDatabaseData = async () => {
     const filter = {
@@ -20,7 +47,9 @@ const getDatabaseData = async () => {
     };
 
     try {
-        const dataBaseData = await Cache(`${ROOT_NOTION_API}/databases/${process.env.DATABASE_ID}/query`, {
+        const dataSourceId = await getDataSourceId();
+
+        const dataBaseData = await Cache(`${ROOT_NOTION_API}/data_sources/${dataSourceId}/query`, {
             duration: "1d",
             type: "json",
             dryRun: true,
@@ -28,7 +57,7 @@ const getDatabaseData = async () => {
                 method: "POST",
                 headers: {
                     "Authorization": `Bearer ${process.env.NOTION_TOKEN}`,
-                    "Notion-Version": "2021-08-16",
+                    "Notion-Version": NOTION_API_VERSION,
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify(filter)
@@ -50,7 +79,7 @@ const getPageBlockChildrenData = async (blockId) => {
             method: "GET",
             headers: {
                 "Authorization": `Bearer ${process.env.NOTION_TOKEN}`,
-                "Notion-Version": "2021-08-16",
+                "Notion-Version": NOTION_API_VERSION,
                 "Content-Type": "application/json"
             }
         }
@@ -69,24 +98,37 @@ function slugify(text) {
 }
 
 const mapNotionResponseToTextContent = ([key, property]) => {
-    switch (property.type) {
-        case "rich_text":
-        case "text":
-      case "title":
-          return {
-            [`${key}`]: property[property.type][0].text.content
-          };
-        case "files":
-          return {
-            [`${key}`]: property[property.type][0].file.url
-          };
-        case "select":
-          return {
-            [`${key}`]: property[property.type].name
-          };
-        default:
-          break;
-      };
+    try {
+        switch (property.type) {
+            case "rich_text":
+            case "text":
+            case "title":
+                if (property[property.type] && Array.isArray(property[property.type]) && property[property.type].length > 0) {
+                    return {
+                        [`${key}`]: property[property.type][0]?.text?.content || ''
+                    };
+                }
+                break;
+            case "files":
+                if (property[property.type] && Array.isArray(property[property.type]) && property[property.type].length > 0) {
+                    return {
+                        [`${key}`]: property[property.type][0]?.file?.url || ''
+                    };
+                }
+                break;
+            case "select":
+                if (property[property.type]) {
+                    return {
+                        [`${key}`]: property[property.type]?.name || ''
+                    };
+                }
+                break;
+            default:
+                break;
+        }
+    } catch (error) {
+        console.warn(`Error mapping property ${key}:`, error.message);
+    }
 };
 
 module.exports = async function () {
@@ -120,44 +162,56 @@ module.exports = async function () {
         const finalResult = await Promise.all(results.map(async (result) => {
             const blockData = await getPageBlockChildrenData(result.id);
 
-            const mappedBlockData = blockData.results
+            const mappedBlockData = (blockData.results || [])
             .map(block => {
-                let mdConvert;
-                let mdText;
+                try {
+                    let mdConvert = '';
+                    let mdText = '';
 
-                switch(block.type) {
-                    case 'heading_1':
-                        mdConvert = '#';
-                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                        break;
-                    case 'heading_2':
-                        mdConvert = '##';
-                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                        break;
-                    case 'heading_3':
-                        mdConvert = '###';
-                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                        break;
-                    case 'bulleted_list_item':
-                        mdConvert = '- ';
-                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                        break;
-                    case 'paragraph':
-                        mdConvert = '';
-                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                        break;
-                    case 'image':
-                        mdConvert = '';
-                        mdText = `![post block related](${block[block.type].file.url})`;
-                        break;
-                    default:
-                        mdConvert = '';
-                        mdText = block[block.type].text.length ? block[block.type].text[0].text.content : '';
-                        break;
+                    if (!block || !block.type) return '';
+
+                    const blockContent = block[block.type];
+                    if (!blockContent) return '';
+
+                    switch(block.type) {
+                        case 'heading_1':
+                            mdConvert = '#';
+                            mdText = blockContent?.text?.[0]?.text?.content || '';
+                            break;
+                        case 'heading_2':
+                            mdConvert = '##';
+                            mdText = blockContent?.text?.[0]?.text?.content || '';
+                            break;
+                        case 'heading_3':
+                            mdConvert = '###';
+                            mdText = blockContent?.text?.[0]?.text?.content || '';
+                            break;
+                        case 'bulleted_list_item':
+                            mdConvert = '- ';
+                            mdText = blockContent?.text?.[0]?.text?.content || '';
+                            break;
+                        case 'paragraph':
+                            mdConvert = '';
+                            mdText = blockContent?.text?.[0]?.text?.content || '';
+                            break;
+                        case 'image':
+                            mdConvert = '';
+                            mdText = `![post block related](${blockContent?.file?.url || ''})`;
+                            break;
+                        default:
+                            mdConvert = '';
+                            mdText = blockContent?.text?.[0]?.text?.content || '';
+                            break;
+                    }
+
+                    return mdConvert && mdText ? `${mdConvert} ${mdText}` : mdText;
+                } catch (error) {
+                    console.warn('Error mapping block:', error.message);
+                    return '';
                 }
-
-                return `${mdConvert} ${mdText}`;
-            }).join('\n');
+            })
+            .filter(text => text.length > 0)
+            .join('\n');
 
             return {
                 ...result,
